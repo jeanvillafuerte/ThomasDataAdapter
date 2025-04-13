@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Data;
@@ -145,7 +145,7 @@ namespace TData.Core.QueryGenerator
 
         private bool GetCachedValues(in int key, Expression predicate, ref string sql, out object[] values)
         {
-            if (DynamicQueryInfo.TryGet(key, out var value))
+            if (DynamicQueryInfoCache.TryGet(key, out var value))
             {
                 sql = value.Query;
 
@@ -369,7 +369,7 @@ namespace TData.Core.QueryGenerator
             var paramValues = DbParametersToBind.Select(x => x.Value).ToArray();
 
             if (buffered && key.HasValue)
-                DynamicQueryInfo.Set(key.Value, new ExpressionQueryItem(in sqlText, in _isStaticQuery, _isStaticQuery ? paramValues : null));
+                DynamicQueryInfoCache.Set(key.Value, new ExpressionQueryItem(in sqlText, in _isStaticQuery, _isStaticQuery ? paramValues : null));
         }
 
 #endregion Cache management

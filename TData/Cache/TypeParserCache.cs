@@ -10,11 +10,11 @@ namespace TData.InternalCache
         internal static HashSet<Type> CachedTypes = new HashSet<Type>();
     }
 
-    internal sealed class CacheTypeParser<T> : CacheTypeHash
+    internal sealed class TypeParserCache<T> : CacheTypeHash
     {
-        internal static ConcurrentDictionary<int, ParserDelegate<T>> TypeParserDictionary = new ConcurrentDictionary<int, ParserDelegate<T>>(Environment.ProcessorCount * 2, 10);
+        internal static ConcurrentDictionary<int, ParserDelegate<T>> TypeParserDictionary = new ConcurrentDictionary<int, ParserDelegate<T>>();
         
-        private CacheTypeParser() { }
+        private TypeParserCache() { }
 
         internal static void Set(in int key, in ParserDelegate<T> value)
         {
@@ -30,7 +30,6 @@ namespace TData.InternalCache
         internal static void Clear()
         {
             TypeParserDictionary.Clear();
-            TypeParserDictionary = new ConcurrentDictionary<int, ParserDelegate<T>>(Environment.ProcessorCount * 2, 10);
         }
     }
 }

@@ -27,5 +27,13 @@ namespace TData.Core.FluentApi
 
         //skip branching reader.IsDbNull(i) in the reader regardless of the column schema
         internal bool? IsNotNull { get; set; }
+
+        internal string EffectiveDbName
+        {
+            get
+            {
+                return DbName ?? Name;
+            }
+        }
     }
 }

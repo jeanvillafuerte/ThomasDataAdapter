@@ -1,4 +1,5 @@
-﻿using System;
+﻿//using Sigil;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
@@ -11,6 +12,7 @@ using System.Text;
 using System.Xml;
 using TData.Configuration;
 using TData.Core.Converters;
+using TData.Core.FluentApi;
 using TData.Helpers;
 using static TData.Core.Provider.DatabaseProvider;
 using Column = TData.Core.FluentApi.DbColumn;
@@ -27,15 +29,19 @@ namespace TData.Core.Provider
         internal static readonly Type SqlServerConnectionType = Type.GetType("Microsoft.Data.SqlClient.SqlConnection, Microsoft.Data.SqlClient")!;
         internal static readonly Type SqlServerCommandType = Type.GetType("Microsoft.Data.SqlClient.SqlCommand, Microsoft.Data.SqlClient")!;
         private static readonly Type SqlDbParameterCollectionType = Type.GetType("Microsoft.Data.SqlClient.SqlParameterCollection, Microsoft.Data.SqlClient")!;
+        private static readonly Type SqlBulkCopyCollectionType = Type.GetType("Microsoft.Data.SqlClient.SqlBulkCopyColumnMappingCollection, Microsoft.Data.SqlClient");
         internal static readonly Type SqlParameterType = Type.GetType("Microsoft.Data.SqlClient.SqlParameter, Microsoft.Data.SqlClient")!;
         internal static readonly Type SqlDataReader = Type.GetType("Microsoft.Data.SqlClient.SqlDataReader, Microsoft.Data.SqlClient")!;
+        internal static readonly Type SqlBulkCopyType = Type.GetType("Microsoft.Data.SqlClient.SqlBulkCopy, Microsoft.Data.SqlClient");
         internal static readonly Type SqlDbType = typeof(SqlDbType);
         private static readonly MethodInfo GetSqlParametersProperty = SqlServerCommandType?.GetProperty("Parameters", SqlDbParameterCollectionType)!.GetGetMethod()!;
+        private static readonly MethodInfo GetSqlBulkCopyColumnsProperty = SqlBulkCopyType?.GetProperty("ColumnMappings", SqlBulkCopyCollectionType).GetGetMethod();
         private static readonly MethodInfo AddSqlParameterMethod = SqlDbParameterCollectionType?.GetMethod("Add", new[] { SqlParameterType })!;
+        private static readonly MethodInfo AddSqlBulkCopyColumnsMethod = SqlBulkCopyCollectionType.GetMethod("Add", new[] { typeof(string), typeof(string) });
         internal static readonly ConstructorInfo SqlServerConnectionConstructor = SqlServerConnectionType?.GetConstructor(new Type[] { typeof(string) })!;
         internal static readonly ConstructorInfo SqlServerCommandConstructor = SqlServerCommandType?.GetConstructor(new Type[] { typeof(string), SqlServerConnectionType })!;
         private static readonly ConstructorInfo SqlParameterConstructor = SqlParameterType?.GetConstructor(new[] { typeof(string), SqlDbType, typeof(int), typeof(ParameterDirection), typeof(bool), typeof(byte), typeof(byte), typeof(string), typeof(DataRowVersion), typeof(object) })!;
-
+        private static readonly ConstructorInfo SqlBulkCopyConstructor = SqlBulkCopyType?.GetConstructor(new[] { typeof(string) });
         private static readonly IReadOnlyDictionary<Type, string> SqlTypes = new Dictionary<Type, string>
         {
                 { typeof(string), "NVarChar"},
@@ -510,6 +516,148 @@ namespace TData.Core.Provider
             Type delegateType = isSingleType ? typeof(ConfigureCommandDelegate) : typeof(ConfigureCommandDelegate2);
 
             return method.CreateDelegate(delegateType);
+        }
+
+        internal static BulkOperationDelegate<T> GetBulkInsertDelegate<T>(in DbSettings options, in IEnumerable<T> entities)
+        {
+            Type bulkCopyType = null;
+            ConstructorInfo bulkCopyConstructor = null;
+            MethodInfo getSqlBulkCopyColumnsProperty = null;
+            MethodInfo addBulkCopyColumnsMethod = null;
+            switch (options.SqlProvider)
+            {
+                case DbProvider.SqlServer:
+                    bulkCopyType = SqlBulkCopyType;
+                    bulkCopyConstructor = SqlBulkCopyConstructor;
+                    getSqlBulkCopyColumnsProperty = GetSqlBulkCopyColumnsProperty;
+                    addBulkCopyColumnsMethod = AddSqlBulkCopyColumnsMethod;
+                    break;
+                //TODO:
+                case DbProvider.Oracle:
+                    break;
+                case DbProvider.PostgreSql:
+                    break;
+                case DbProvider.MySql:
+                    break;
+                case DbProvider.Sqlite:
+                    break;
+            }
+
+            var method = new DynamicMethod(
+              "SetupCommand" + InternalCounters.GetNextCommandHandlerCounter().ToString(),
+              null,
+              new[] { typeof(T[]), typeof(string) },
+              typeof(DatabaseHelperProvider),
+              true);
+
+            var type = typeof(T);
+            if (!DbConfig.Tables.TryGetValue(type.FullName!, out var tableConfig))
+            {
+                var dbTable = new DbTable { Name = type.Name, Columns = new LinkedList<TData.Core.FluentApi.DbColumn>() };
+                dbTable.AddFieldsAsColumns<T>();
+                DbConfig.Tables.TryAdd(type.FullName, dbTable);
+                tableConfig = dbTable;
+            }
+
+            var il = method.GetILGenerator(64);
+
+            //declare sqlBulkCopy
+            var bulkCopyInstance = il.DeclareLocal(bulkCopyType);
+            il.Emit(OpCodes.Ldarg_1);
+            il.Emit(OpCodes.Newobj, bulkCopyConstructor);
+            il.Emit(OpCodes.Stloc, bulkCopyInstance);
+
+            //set table name
+            il.Emit(OpCodes.Ldloc, bulkCopyInstance);
+            il.Emit(OpCodes.Ldstr, tableConfig.EffectiveDbName);
+            il.Emit(OpCodes.Call, bulkCopyType.GetProperty("DestinationTableName").GetSetMethod(true));
+
+            //mapping dataset columns' to table columns
+            foreach (var column in tableConfig.Columns)
+            {
+                il.Emit(OpCodes.Ldloc, bulkCopyInstance);
+                il.Emit(OpCodes.Callvirt, getSqlBulkCopyColumnsProperty);
+                il.Emit(OpCodes.Ldstr, column.EffectiveDbName);
+                il.Emit(OpCodes.Ldstr, column.EffectiveDbName);
+                il.Emit(OpCodes.Callvirt, addBulkCopyColumnsMethod);
+                il.Emit(OpCodes.Pop);
+            }
+
+            //declare datatable
+            var dataTableType = typeof(DataTable);
+            var dataTableInstance = il.DeclareLocal(dataTableType);
+            il.Emit(OpCodes.Newobj, dataTableType.GetConstructor(Type.EmptyTypes));
+            il.Emit(OpCodes.Stloc, dataTableInstance);
+
+            //register columns to save
+            var dataColumnCollectionType = typeof(DataColumnCollection);
+            foreach (var column in tableConfig.Columns)
+            {
+                il.Emit(OpCodes.Ldloc, dataTableInstance);
+                il.Emit(OpCodes.Callvirt, dataTableType.GetProperty("Columns", dataColumnCollectionType).GetGetMethod());
+                il.Emit(OpCodes.Ldstr, column.EffectiveDbName);
+                il.Emit(OpCodes.Callvirt, dataColumnCollectionType.GetMethod("Add", new[] { typeof(string) }));
+                il.Emit(OpCodes.Pop);
+            }
+
+            //declare for loop
+            LocalBuilder counter = il.DeclareLocal(typeof(int));
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Stloc, counter);
+
+            Label loopStart = il.DefineLabel();
+            Label loopCondition = il.DefineLabel();
+
+            il.Emit(OpCodes.Br, loopCondition);
+            il.MarkLabel(loopStart);
+
+            //generate row to populate data table
+            LocalBuilder rowInstance = il.DeclareLocal(typeof(DataRow));
+            il.Emit(OpCodes.Ldloc, dataTableInstance);
+            il.Emit(OpCodes.Callvirt, dataTableType.GetMethod("NewRow"));
+            il.Emit(OpCodes.Stloc, rowInstance);
+
+            foreach (var column in tableConfig.Columns)
+            {
+                il.Emit(OpCodes.Ldloc, rowInstance);
+                il.Emit(OpCodes.Ldstr, column.EffectiveDbName);
+
+                //pop up the current item by the loop index
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldloc, counter);
+                il.Emit(OpCodes.Ldelem_Ref);
+
+                //read the property value
+                var getMethod = column.Property.GetGetMethod();
+                il.Emit(getMethod.IsVirtual ? OpCodes.Callvirt : OpCodes.Call, getMethod);
+                if (column.Property.PropertyType.IsValueType)
+                {
+                    il.Emit(OpCodes.Box, column.Property.PropertyType);
+                }
+
+                il.Emit(OpCodes.Callvirt, typeof(DataRow).GetMethod("set_Item", new Type[] { typeof(string), typeof(object) }));
+            }
+
+            //increment counter
+            il.Emit(OpCodes.Ldloc, counter);
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, counter);
+
+            //check condition
+            il.MarkLabel(loopCondition);
+            il.Emit(OpCodes.Ldloc, counter);
+            il.Emit(OpCodes.Ldarg_0);
+            il.Emit(OpCodes.Ldlen);
+            il.Emit(OpCodes.Blt, loopStart);
+
+            il.Emit(OpCodes.Ldloc, bulkCopyInstance);
+            il.Emit(OpCodes.Ldloc, dataTableInstance);
+            il.Emit(OpCodes.Call, bulkCopyType.GetMethod("WriteToServer", new Type[] { dataTableType }));
+
+            il.Emit(OpCodes.Ret);
+
+            return (BulkOperationDelegate<T>)method.CreateDelegate(typeof(BulkOperationDelegate<T>));
         }
 
         private const int DataRowVersionDefault = (int)DataRowVersion.Default;

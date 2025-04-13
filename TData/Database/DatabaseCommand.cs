@@ -10,6 +10,9 @@ using TData.Database;
 using TData.DbResult;
 using System.IO;
 using static TData.Core.Provider.DatabaseProvider;
+using TData.Core.FluentApi;
+using TData.Cache;
+using System.Linq;
 
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("TData.Tests")]
 namespace TData
@@ -80,7 +83,6 @@ namespace TData
         {
             _settings = settings;
             _preparationQueryKey = operationHash;
-            _script = script;
             _filter = filter;
             _command = command;
 
@@ -97,10 +99,11 @@ namespace TData
                 _commandBehavior = commandMetadata.CommandBehavior;
                 _commandSetupDelegate = commandMetadata.LoadParametersDelegate;
                 _actionOutParameterLoader = commandMetadata.LoadOutParametersDelegate;
-                _script = commandMetadata.TransformedScript ?? _script;
+                _script = commandMetadata.TransformedScript ?? script;
             }
             else
             {
+                _script = script;
                 _commandBehavior = configuration.CommandBehavior;
                 SetupCommand(
                     in filter, 
@@ -211,9 +214,9 @@ namespace TData
             }
           
             DbParameterInfo[] convertedParameters = Array.Empty<DbParameterInfo>();
-            if (parameters is DbParameterInfo[] && parameters.Length > 0)
+            if (parameters is DbParameterInfo[] v && parameters.Length > 0)
             {
-                convertedParameters = (DbParameterInfo[])parameters;
+                convertedParameters = v;
                 _values = new object[convertedParameters.Length];
                 for (int i = 0; i < convertedParameters.Length; i++)
                 {
@@ -834,6 +837,19 @@ namespace TData
         #endregion
 
         #endregion reader operations
+
+        #region bulk operations
+        public void BulkInsert<T>(in int operationHash, in IEnumerable<T> entities)
+        {
+            if (!BulkOperationCache<T>.TryGet(_preparationQueryKey, out var bulkInsertDelegate))
+            {
+                bulkInsertDelegate = DatabaseHelperProvider.GetBulkInsertDelegate(in _settings, in entities);
+                BulkOperationCache<T>.Set(in operationHash, bulkInsertDelegate);
+            }
+
+            bulkInsertDelegate(entities.ToArray(), _settings.StringConnection);
+        }
+        #endregion
 
         public void Dispose()
         {

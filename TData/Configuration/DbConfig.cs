@@ -8,8 +8,8 @@ namespace TData.Configuration
 {
     public sealed class DbConfig
     {
-        private static readonly ConcurrentDictionary<int, DbSettings> dictionary = new ConcurrentDictionary<int, DbSettings>(Environment.ProcessorCount * 2, 10);
-        internal static ConcurrentDictionary<string, DbTable> Tables = new ConcurrentDictionary<string, DbTable>(Environment.ProcessorCount * 2, 10);
+        private static readonly ConcurrentDictionary<int, DbSettings> dictionary = new ConcurrentDictionary<int, DbSettings>();
+        internal static ConcurrentDictionary<string, DbTable> Tables = new ConcurrentDictionary<string, DbTable>();
         private static int _defaultSignatureHash;
         /// <summary>
         /// Clears all the configurations and tables.

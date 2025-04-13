@@ -10,5 +10,13 @@ namespace TData.Core.FluentApi
 
         public DbColumn Key { get; set; }
         public LinkedList<DbColumn> Columns { get; set; }
+
+        internal string EffectiveDbName
+        {
+            get
+            {
+                return DbName ?? Name;
+            }
+        }
     }
 }
