@@ -70,7 +70,7 @@ namespace TData
                 key = (key * 23) + signatureHashCode;
             }
 
-            if (CacheTypeParser<T>.TryGet(in key, out ParserDelegate<T> parser))
+            if (TypeParserCache<T>.TryGet(in key, out ParserDelegate<T> parser))
                 return parser;
 
             var columnInfoCollection = GetColumnMap(in typeResult, in reader, in settings.SqlProvider);
@@ -114,7 +114,7 @@ namespace TData
             }
 
             var @delegate = (ParserDelegate<T>)dynamicMethod.CreateDelegate(typeof(ParserDelegate<T>));
-            CacheTypeParser<T>.Set(key, @delegate);
+            TypeParserCache<T>.Set(key, @delegate);
             return @delegate;
         }
 

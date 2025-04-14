@@ -1,4 +1,8 @@
-﻿using System.Data;
+﻿using Bogus;
+using Microsoft.Data.SqlClient;
+using MySql.Data.MySqlClient;
+using Oracle.ManagedDataAccess.Client;
+using System.Data;
 using System.Reflection;
 using System.Text;
 using TData.Attributes;
@@ -141,6 +145,27 @@ namespace TData.Tests
 
             dbContext.DeleteIf<User>(x => ids.Contains(x.Id));
         }
+
+        [Test]
+        [TestCase(1000)]
+        [TestCase(10000)]
+        [TestCase(100000)]
+        public void BulkInsert_Generic_Type(int amount)
+        {
+            var usersGenerator = new Faker<UserNullableClass>()
+                            .RuleFor(u => u.UserTypeId, f => f.Random.Number(1, 3))
+                            .RuleFor(u => u.Name, (f, u) => f.Name.FirstName())
+                            .RuleFor(u => u.State, f => f.Random.Bool())
+                            .RuleFor(u => u.Salary, f => f.Random.Decimal(1000.10m, 9999.99m))
+                            .RuleFor(u => u.Birthday, f => f.Date.Between(new DateTime(), new DateTime()))
+                            .RuleFor(u => u.UserCode, f => f.Random.Guid())
+                            .RuleFor(u => u.Icon, f => f.Random.Bytes(50));
+            var users = usersGenerator.Generate(amount);
+            var dbContext = DbHub.Use(DbSignature);
+            dbContext.BulkInsert(users);
+            Assert.Pass();
+        }
+
         #region data types
         [Test]
         public void GuidTest()

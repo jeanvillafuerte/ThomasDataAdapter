@@ -1814,6 +1814,14 @@ namespace TData
             return (TE)TypeConversionRegistry.ConvertOutParameterValue(in Options.SqlProvider, rawValue, typeof(TE), true);
         }
 
+
+        public void BulkInsert<T>(IEnumerable<T> entities)
+        {
+            var operationHash = CalculateOperationHash("Bulk_Insert", entities, in Options.SqlProvider, in AddConfig, in _transaction);
+            using var command = new DatabaseCommand(Options);
+            command.BulkInsert(in operationHash, in entities);
+        }
+
         private static readonly DbCommandConfiguration UpdateConfig = new DbCommandConfiguration(
                                                                       commandBehavior: CommandBehavior.Default,
                                                                       methodHandled: MethodHandled.Execute,
@@ -1943,14 +1951,14 @@ namespace TData
 
         public static void Clear()
         {
-            DynamicQueryInfo.Clear();
+            DynamicQueryInfoCache.Clear();
             DatabaseHelperProvider.CommandMetadata.Clear();
 
             foreach (var type in CacheTypeHash.CachedTypes)
             {
                 if (type != null)
                 {
-                    var genericType = typeof(CacheTypeParser<>).MakeGenericType(type);
+                    var genericType = typeof(TypeParserCache<>).MakeGenericType(type);
                     var method = genericType.GetMethod("Clear", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
                     method.Invoke(null, null);
                 }

@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Linq.Expressions;
 
 namespace TData.Core.WriteDatabase
@@ -67,5 +69,7 @@ namespace TData.Core.WriteDatabase
         /// <typeparam name="T">The type of the entity.</typeparam>
         /// <param name="condition">The condition to match entities.</param>
         void DeleteIf<T>(Expression<Func<T, bool>> condition);
+
+        void BulkInsert<T>(IEnumerable<T> entities);
     }
 }

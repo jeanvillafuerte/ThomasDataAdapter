@@ -12,8 +12,8 @@ namespace TData.Core.Provider
 {
     internal static partial class DatabaseHelperProvider
     {
-        internal static readonly ConcurrentDictionary<int, CommandMetaData> CommandMetadata = new ConcurrentDictionary<int, CommandMetaData>(Environment.ProcessorCount * 2, 50);
-        internal static readonly ConcurrentDictionary<TData.DbProvider, Func<string, DbConnection>> ConnectionCache = new ConcurrentDictionary<TData.DbProvider, Func<string, DbConnection>>(Environment.ProcessorCount * 2, 10);
+        internal static readonly ConcurrentDictionary<int, CommandMetaData> CommandMetadata = new ConcurrentDictionary<int, CommandMetaData>();
+        internal static readonly ConcurrentDictionary<TData.DbProvider, Func<string, DbConnection>> ConnectionCache = new ConcurrentDictionary<TData.DbProvider, Func<string, DbConnection>>();
 
         internal static bool HasDbParameterAttribute(in PropertyInfo property)
         {

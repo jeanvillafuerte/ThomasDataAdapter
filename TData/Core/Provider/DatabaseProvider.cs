@@ -18,6 +18,7 @@ namespace TData.Core.Provider
         
         public delegate DbCommand ConfigureCommandDelegate(in object command, in string connectionString, in string commandText, in DbCommand existingCommand);
         public delegate DbCommand ConfigureCommandDelegate2(in object[] command, in string connectionString, in string commandText, in DbCommand existingCommand);
+        public delegate void BulkOperationDelegate<T>(T[] command, string connectionString);
 
         public static (ConfigureCommandDelegate, Action<object, DbCommand, DbDataReader>) GetCommandMetaData(in LoaderConfiguration options, in bool isExecuteNonQuery, in Type type, in bool addPagingParams, ref DbParameterInfo[] parameters)
         {
